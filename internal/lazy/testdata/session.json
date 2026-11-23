@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "workspaces": [
+    {
+      "id": "w8",
+      "public_pane_numbers": { "4": 46, "7": 59, "9": 60 },
+      "tabs": [
+        {
+          "panes": {
+            "4": {
+              "cwd": "/home/u/Dev/a",
+              "agent_session": { "agent": "claude", "kind": "id", "source": "herdr:claude", "value": "sess-claude" }
+            },
+            "7": { "cwd": "/home/u/Dev/a" }
+          }
+        },
+        {
+          "panes": {
+            "9": {
+              "cwd": "/home/u/Dev/b",
+              "agent_session": { "agent": "omp", "kind": "path", "source": "herdr:omp", "value": "/tmp/omp/s.jsonl" }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "wB",
+      "public_pane_numbers": { "1": 16, "2": 17 },
+      "tabs": [
+        {
+          "panes": {
+            "1": {
+              "cwd": "/home/u/Dev/c",
+              "agent_resume": { "agent": "mine", "argv": ["mine", "--resume", "R1"], "source": "mine" }
+            },
+            "2": {
+              "cwd": "/home/u/Dev/c",
+              "agent_session": { "agent": "mystery", "kind": "id", "source": "x", "value": "y" }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

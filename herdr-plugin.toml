@@ -1,0 +1,16 @@
+id = "crstian.lazy-resume"
+name = "Lazy resume"
+version = "0.1.0"
+min_herdr_version = "0.9.2"
+description = "Resume agent panes only when you focus them after a server restart"
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["go", "build", "-o", "bin/herdr-lazy-resume", "."]
+
+[[startup]]
+command = ["bin/herdr-lazy-resume"]
+
+[[events]]
+on = "pane.focused"
+command = ["bin/herdr-lazy-resume"]
