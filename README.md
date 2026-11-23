@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="A Go gopher in a nightcap waking up inside a focused terminal window, next to two dimmed windows with sleeping gophers" width="240">
+</p>
+
 # herdr-focus-resume
 
 A [Herdr](https://herdr.dev) plugin that resumes agent panes when you focus them, instead of all at
@@ -85,4 +89,5 @@ go test -run '^$' -fuzz FuzzShellQuoteRoundTrip -fuzztime 30s ./internal/wake
 
 ## License
 
-MIT
+MIT. The logo is based on the Go gopher by Renée French, licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
