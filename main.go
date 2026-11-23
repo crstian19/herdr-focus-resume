@@ -1,4 +1,4 @@
-// Command herdr-lazy-resume is a Herdr plugin hook: after a server restart it
+// Command herdr-focus-resume is a Herdr plugin hook: after a server restart it
 // resumes each agent pane only when that pane is focused.
 package main
 
@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/crstian19/herdr-lazy-resume/internal/lazy"
+	"github.com/crstian19/herdr-focus-resume/internal/wake"
 )
 
 func main() {
@@ -34,7 +34,7 @@ func run(logger *log.Logger) error {
 	if !resumeDisabled() {
 		// Herdr resumes every agent itself; acting too would start them twice.
 		if os.Getenv("HERDR_PLUGIN_EVENT") == "startup" {
-			logger.Printf("inactive: set [session] resume_agents_on_restore = false in %s to enable lazy resume", configPath())
+			logger.Printf("inactive: set [session] resume_agents_on_restore = false in %s to enable focus resume", configPath())
 		}
 		return nil
 	}
@@ -43,8 +43,8 @@ func run(logger *log.Logger) error {
 	if bin == "" {
 		bin = "herdr"
 	}
-	r := &lazy.Runner{
-		Herdr:      lazy.CLI{Bin: bin},
+	r := &wake.Runner{
+		Herdr:      wake.CLI{Bin: bin},
 		LedgerPath: filepath.Join(stateDir, "ledger-"+sessionKey(sessionDir)+".json"),
 		Log:        logger.Printf,
 		IdleWait:   5 * time.Second,
@@ -57,7 +57,7 @@ func run(logger *log.Logger) error {
 			return err
 		}
 		defer f.Close()
-		dormant, skipped, err := lazy.ParseSession(f)
+		dormant, skipped, err := wake.ParseSession(f)
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func resumeDisabled() bool {
 	if err != nil {
 		return false
 	}
-	return lazy.ResumeOnRestoreDisabled(bytes.NewReader(b))
+	return wake.ResumeOnRestoreDisabled(bytes.NewReader(b))
 }
 
 // sessionKey separates ledgers per Herdr session; plugins are global.
@@ -116,7 +116,7 @@ func sessionKey(sessionDir string) string {
 func openLog() *log.Logger {
 	dir := os.Getenv("HERDR_PLUGIN_STATE_DIR")
 	if dir != "" {
-		if f, err := os.OpenFile(filepath.Join(dir, "lazy-resume.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+		if f, err := os.OpenFile(filepath.Join(dir, "focus-resume.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
 			return log.New(f, "", log.LstdFlags)
 		}
 	}

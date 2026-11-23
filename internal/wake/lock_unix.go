@@ -1,6 +1,6 @@
 //go:build unix
 
-package lazy
+package wake
 
 import (
 	"os"

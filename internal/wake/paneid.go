@@ -1,5 +1,5 @@
-// Package lazy implements on-focus agent resume for Herdr sessions.
-package lazy
+// Package wake implements on-focus agent resume for Herdr sessions.
+package wake
 
 import "strings"
 

@@ -1,4 +1,4 @@
-package lazy
+package wake
 
 import (
 	"bufio"

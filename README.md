@@ -1,4 +1,4 @@
-# herdr-lazy-resume
+# herdr-focus-resume
 
 A [Herdr](https://herdr.dev) plugin that resumes agent panes when you focus them, instead of all at
 once when the server starts.
@@ -14,7 +14,7 @@ shells (~7 MB each) until you select them.
 Requires Herdr 0.9.2 or later and Go to build.
 
 ```bash
-herdr plugin install crstian19/herdr-lazy-resume
+herdr plugin install crstian19/herdr-focus-resume
 ```
 
 Turn off Herdr's own agent restore in `~/.config/herdr/config.toml`:
@@ -41,7 +41,7 @@ agent session reference in `session.json`.
 The resume command is the one the agent reported to Herdr (`agent_resume`) or, for Herdr's built-in
 integrations, the command from Herdr's documentation: `claude`, `codex`, `omp`, `pi`, `opencode`,
 `kilo`, `kimi`, `grok`, `copilot`, `devin`, `droid`, `qwen`, `hermes` and `mastracode`. See
-`internal/lazy/resume.go`.
+`internal/wake/resume.go`.
 
 ## Safety
 
@@ -56,7 +56,7 @@ integrations, the command from Herdr's documentation: `claude`, `codex`, `omp`, 
 ## Logs
 
 Logs and per-session state are in Herdr's plugin state directory, usually
-`~/.local/state/herdr/plugins/crstian.lazy-resume/`:
+`~/.local/state/herdr/plugins/crstian19.focus-resume/`:
 
 ```text
 startup: 10 dormant pane(s)
@@ -76,11 +76,11 @@ woke wE:p1V (omp) in /home/me/other
 ## Development
 
 ```bash
-go build -o bin/herdr-lazy-resume .
+go build -o bin/herdr-focus-resume .
 herdr plugin link "$PWD"
 
 go vet ./... && go test -race ./...
-go test -run '^$' -fuzz FuzzShellQuoteRoundTrip -fuzztime 30s ./internal/lazy
+go test -run '^$' -fuzz FuzzShellQuoteRoundTrip -fuzztime 30s ./internal/wake
 ```
 
 ## License
