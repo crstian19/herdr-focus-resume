@@ -21,6 +21,8 @@ Requires Herdr 0.9.2 or later and Go to build.
 herdr plugin install crstian19/herdr-focus-resume
 ```
 
+To pin a release, add `--ref vX.Y.Z` (see [releases](https://github.com/crstian19/herdr-focus-resume/releases)).
+
 Turn off Herdr's own agent restore in `~/.config/herdr/config.toml`:
 
 ```toml
