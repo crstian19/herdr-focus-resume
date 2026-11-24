@@ -2,6 +2,24 @@
   <img src="assets/logo.png" alt="A Go gopher in a nightcap waking up inside a focused terminal window, next to two dimmed windows with sleeping gophers" width="240">
 </p>
 
+<p align="center">
+  <a href="https://github.com/crstian19/herdr-focus-resume/releases">
+    <img src="https://img.shields.io/github/v/release/crstian19/herdr-focus-resume?sort=semver&style=for-the-badge" alt="Release">
+  </a>
+  <a href="https://github.com/crstian19/herdr-focus-resume/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/crstian19/herdr-focus-resume/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI">
+  </a>
+  <a href="go.mod">
+    <img src="https://img.shields.io/github/go-mod/go-version/crstian19/herdr-focus-resume?logo=go&logoColor=white&label=go&style=for-the-badge" alt="Go version">
+  </a>
+  <a href="https://herdr.dev">
+    <img src="https://img.shields.io/badge/herdr-%E2%89%A5%200.9.2-blue?style=for-the-badge" alt="Herdr 0.9.2 or later">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License: MIT">
+  </a>
+</p>
+
 # herdr-focus-resume
 
 A [Herdr](https://herdr.dev) plugin that resumes agent panes when you focus them, instead of all at
@@ -21,7 +39,8 @@ Requires Herdr 0.9.2 or later and Go to build.
 herdr plugin install crstian19/herdr-focus-resume
 ```
 
-To pin a release, add `--ref vX.Y.Z` (see [releases](https://github.com/crstian19/herdr-focus-resume/releases)).
+To pin a release, add `--ref` with its tag, for example `--ref v0.1.0` (see
+[releases](https://github.com/crstian19/herdr-focus-resume/releases)).
 
 Turn off Herdr's own agent restore in `~/.config/herdr/config.toml`:
 
