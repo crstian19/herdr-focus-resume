@@ -1,6 +1,6 @@
 id = "crstian19.focus-resume"
 name = "Focus resume"
-version = "0.1.0"
+version = "0.1.0" # x-releaser-pleaser-version
 min_herdr_version = "0.9.2"
 description = "Resume agent panes only when you focus them after a server restart"
 platforms = ["linux", "macos"]
