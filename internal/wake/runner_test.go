@@ -62,7 +62,7 @@ func TestStartupWakesOnlyFocusedPane(t *testing.T) {
 	if err := r.Startup(dormantFixture); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"w1:p2 'claude' '--resume' 'B'"}
+	want := []string{"w1:p2 claude '--resume' 'B'"}
 	if !reflect.DeepEqual(h.ran, want) {
 		t.Fatalf("ran %q, want %q", h.ran, want)
 	}
@@ -79,7 +79,7 @@ func TestFocusWakesOncePerPane(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []string{"w2:p1 'omp' '--resume=/s'", "w1:p1 'claude' '--resume' 'A'"}
+	want := []string{"w2:p1 omp '--resume=/s'", "w1:p1 claude '--resume' 'A'"}
 	if !reflect.DeepEqual(h.ran, want) {
 		t.Fatalf("ran %q, want %q", h.ran, want)
 	}
@@ -112,7 +112,7 @@ func TestFocusWaitsForShellThenDropsBusyPane(t *testing.T) {
 	_ = r.Focus("w1:p2") // never idle: user owns the pane, dropped
 	h.busy["w1:p2"] = 0
 	_ = r.Focus("w1:p2") // must stay dropped
-	want := []string{"w1:p1 'claude' '--resume' 'A'"}
+	want := []string{"w1:p1 claude '--resume' 'A'"}
 	if !reflect.DeepEqual(h.ran, want) {
 		t.Fatalf("ran %q, want %q", h.ran, want)
 	}

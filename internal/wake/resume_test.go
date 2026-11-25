@@ -96,3 +96,20 @@ func FuzzShellQuoteRoundTrip(f *testing.F) {
 		}
 	})
 }
+
+func TestCommandLineLeavesPlainCommandUnquoted(t *testing.T) {
+	cases := map[string][]string{
+		"claude '--resume' 'a b'":       {"claude", "--resume", "a b"},
+		"omp '--resume=/s'":             {"omp", "--resume=/s"},
+		"codex":                         {"codex"},
+		"'-x' 'y'":                      {"-x", "y"},
+		`'a$(b)' 'c'`:                   {"a$(b)", "c"},
+		"'semi;colon'":                  {"semi;colon"},
+		"kimi-code.v2 '--session' 'id'": {"kimi-code.v2", "--session", "id"},
+	}
+	for want, argv := range cases {
+		if got := CommandLine(argv); got != want {
+			t.Errorf("CommandLine(%q) = %q, want %q", argv, got, want)
+		}
+	}
+}

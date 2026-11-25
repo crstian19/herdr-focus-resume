@@ -16,6 +16,13 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "app" {
+		if err := runApp(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "herdr-focus-resume: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	logger := openLog()
 	if err := run(logger); err != nil {
 		logger.Printf("error: %v", err)

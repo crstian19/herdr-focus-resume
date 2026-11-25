@@ -94,6 +94,36 @@ func validateArgv(argv []string) error {
 	return nil
 }
 
+// CommandLine is what gets typed into the pane: like ShellQuote, but a plain
+// command name stays unquoted so the user's shell aliases and functions for it
+// apply, as if they had typed it (for example `alias omp='omp --allow-home'`).
+func CommandLine(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	if !plainWord(argv[0]) {
+		return ShellQuote(argv)
+	}
+	if len(argv) == 1 {
+		return argv[0]
+	}
+	return argv[0] + " " + ShellQuote(argv[1:])
+}
+
+func plainWord(s string) bool {
+	if s == "" || s[0] == '-' {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '+', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // ShellQuote joins argv into a POSIX shell command line that the pane's
 // shell parses back into exactly argv.
 func ShellQuote(argv []string) string {

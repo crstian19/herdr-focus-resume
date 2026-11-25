@@ -122,7 +122,7 @@ func (r *Runner) wake(d Dormant) bool {
 		}
 		r.sleep(200 * time.Millisecond)
 	}
-	if err := r.Herdr.Run(d.PaneID, ShellQuote(d.Argv)); err != nil {
+	if err := r.Herdr.Run(d.PaneID, CommandLine(d.Argv)); err != nil {
 		r.logf("wake %s: %v", d.PaneID, err)
 		return false
 	}
