@@ -23,7 +23,7 @@
 # herdr-focus-resume
 
 A [Herdr](https://herdr.dev) plugin that resumes agent panes when you focus them, instead of all at
-once when the server starts.
+once when the server starts. It works with both the Herdr TUI and the Herdr desktop app.
 
 After a server restart, Herdr resumes every agent pane it knows about (`claude --resume`,
 `omp --resume`, `codex resume`, ...) as soon as a client attaches. With a dozen panes across
@@ -31,7 +31,11 @@ workspaces, that is a dozen agents booting together, each taking 400-800 MB of R
 you will not open today. With this plugin only the focused pane resumes. The others stay as idle
 shells (~7 MB each) until you select them.
 
-## Install
+The Herdr app has the opposite problem. When herdr-core loses its terminals (a reboot, a logout, a
+core restart), every terminal comes back as a plain shell in its last folder, and no agent is
+resumed at all. With this plugin, each one resumes when you focus it.
+
+## Install: Herdr TUI
 
 Requires Herdr 0.9.2 or later and Go to build.
 
@@ -52,7 +56,43 @@ resume_agents_on_restore = false
 Restart the Herdr server (`herdr server stop`, then `herdr`). Note that stopping the server ends
 every process running in its panes.
 
+## Install: Herdr app
+
+Requires the Herdr app with herdr-core, Go to build, and Herdr's agent integrations.
+
+1. Install the binary somewhere on your `PATH`:
+
+   ```bash
+   go install github.com/crstian19/herdr-focus-resume@latest
+   ```
+
+2. Install Herdr's integration for each agent you use. They are the same ones the TUI uses, and the
+   plugin reads their session reports. This needs the `herdr` CLI:
+
+   ```bash
+   herdr integration install claude    # also: omp, codex, pi, opencode, kimi, ...
+   herdr integration status
+   ```
+
+3. Add one line to your shell rc. It only acts in a terminal of the Herdr app (`HC_TERMINAL_ID` is
+   set) and never inside the Herdr TUI:
+
+   ```bash
+   # ~/.zshrc or ~/.bashrc
+   eval "$(herdr-focus-resume app env)"
+   ```
+
+   ```fish
+   # ~/.config/fish/config.fish
+   herdr-focus-resume app env fish | source
+   ```
+
+Open a new terminal in the app, or restart your agents, so they pick up the variables. There is no
+mod to add and no layout to change.
+
 ## How it works
+
+### Herdr TUI
 
 With `resume_agents_on_restore = false`, Herdr restores panes as plain shells but keeps each pane's
 agent session reference in `session.json`.
@@ -68,6 +108,26 @@ integrations, the command from Herdr's documentation: `claude`, `codex`, `omp`, 
 `kilo`, `kimi`, `grok`, `copilot`, `devin`, `droid`, `qwen`, `hermes` and `mastracode`. See
 `internal/wake/resume.go`.
 
+### Herdr app
+
+The app has no plugin hooks and no `session.json`, so the plugin brings its own pieces:
+
+- **Session reports:** the rc line points Herdr's integrations at a small daemon, through
+  `HERDR_ENV`, `HERDR_PANE_ID` (the terminal's `HC_TERMINAL_ID`) and `HERDR_SOCKET_PATH`. The daemon
+  speaks the same protocol as Herdr (`pane.report_agent_session`). It stores each session as labels
+  on the terminal (`focus-resume.agent`, `.session`, `.cwd` and `.instance`). Labels survive a
+  herdr-core restart.
+- **Startup:** the rc line also runs `herdr-focus-resume app ensure`, which starts the daemon if it
+  isn't running. The first shell after the terminals were lost builds that boot's list of dormant
+  terminals. These are the ones whose session was recorded under an earlier herdr-core holder
+  instance. The focused terminal resumes right away.
+- **Focus:** the daemon reads the app's focused terminal with `herdr-app status`, every 0.7 s while
+  the window is open. When you select a dormant terminal, it checks that the shell is idle and the
+  folder hasn't changed, then types the resume command with `hc send`. Each terminal resumes once
+  per boot.
+
+`herdr-focus-resume app focus <t>` resumes a terminal by hand.
+
 ## Safety
 
 - If `resume_agents_on_restore` is not `false`, the plugin does nothing, so an agent is never
@@ -76,7 +136,10 @@ integrations, the command from Herdr's documentation: `claude`, `codex`, `omp`, 
   the list.
 - Focus events that arrive at the same time are serialised with a file lock.
 - Resume commands are validated with Herdr's own rules (plain command name, no control characters)
-  and shell-quoted before they are typed.
+  and shell-quoted before they are typed. The command name is left unquoted when it is a plain word,
+  so your shell aliases and functions for it apply (for example `alias omp='omp --allow-home'`).
+- In the app, only local terminals are touched. Terminals on other machines (`vps/t7`) are skipped,
+  and sessions recorded during the current boot are never resumed.
 
 ## Logs
 
@@ -89,6 +152,8 @@ woke wE:p2B (claude) in /home/me/project
 woke wE:p1V (omp) in /home/me/other
 ```
 
+In the app, the daemon logs to `~/.local/state/herdr-focus-resume/app.log`.
+
 ## Limitations
 
 - Pane ids are derived from `session.json` (`public_pane_numbers`, encoded in Crockford base32).
@@ -97,6 +162,13 @@ woke wE:p1V (omp) in /home/me/other
 - Tested on Linux with Herdr 0.9.5, Claude Code and omp. The other agents use the documented
   commands but have not been tested.
 - The resume command shows up in the shell history of the pane.
+- In the app, the rc line sets `HERDR_ENV=1`, so tools that check it think they run inside the Herdr
+  TUI. Running `herdr` commands from an app terminal reaches the plugin's daemon, which only answers
+  integration reports.
+- In the app, if you quit an agent and keep its shell, that shell still holds the last session. After
+  the next reboot it resumes when you focus it.
+- The app support was tested on Linux with Herdr app 0.1.18 and herdr-core 0.1.22, using Claude Code's
+  integration end to end.
 
 ## Development
 
