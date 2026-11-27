@@ -39,6 +39,8 @@ type App struct {
 	StateDir string
 	Log      func(format string, args ...any)
 	IdleWait time.Duration
+	// Poll is how often Herdr API waits check a terminal (default 300 ms).
+	Poll time.Duration
 }
 
 func (a *App) logf(format string, args ...any) {

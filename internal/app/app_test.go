@@ -3,8 +3,10 @@ package app
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net"
 	"path/filepath"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -18,10 +20,22 @@ type fakeCore struct {
 	instance string
 	focused  string
 	sent     map[string][]string
+
+	// Herdr API side.
+	screens map[string]string   // hc read text per terminal
+	keys    map[string][]string // keys pressed per terminal
+	killed  []string
+	panes   []AppPane // app window layout; nil means the window is closed
+	did     []string  // herdr-app do commands with their JSON args
+	// onSend runs after Send, for tests that move an agent through states.
+	onSend   func(addr string)
+	gets     int  // Get calls, to see a wait stop polling
+	racePane bool // AppDo split also shows another new pane in tab tb2
 }
 
 func newFakeCore(instance string) *fakeCore {
-	return &fakeCore{terms: map[string]*Terminal{}, instance: instance, sent: map[string][]string{}}
+	return &fakeCore{terms: map[string]*Terminal{}, instance: instance, sent: map[string][]string{},
+		screens: map[string]string{}, keys: map[string][]string{}}
 }
 
 // shell adds a terminal whose foreground process is its shell.
@@ -40,15 +54,32 @@ func (f *fakeCore) Terminals() ([]Terminal, error) {
 	defer f.mu.Unlock()
 	var out []Terminal
 	for _, t := range f.terms {
-		out = append(out, Terminal{Address: t.Address, Cwd: t.Cwd, State: t.State})
+		lt := Terminal{Address: t.Address, Name: t.Name, Cwd: t.Cwd, State: t.State, Turn: t.Turn}
+		lt.Agent = "zsh"
+		if t.Status != nil {
+			// hc ls has the state, and the app as the terminal's agent.
+			lt.Status = &Status{State: t.Status.State}
+			lt.Agent = t.Status.App
+		}
+		out = append(out, lt)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Address < out[j].Address })
 	return out, nil
 }
 
 func (f *fakeCore) Get(addr string) (Terminal, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	t := *f.terms[addr]
+	f.gets++
+	ft, ok := f.terms[addr]
+	if !ok {
+		return Terminal{}, fmt.Errorf("no terminal %s", addr)
+	}
+	t := *ft
+	if t.Status != nil {
+		st := *t.Status
+		t.Status = &st
+	}
 	labels := map[string]string{}
 	for k, v := range t.Labels {
 		labels[k] = v
@@ -74,6 +105,12 @@ func (f *fakeCore) Send(addr, text string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent[addr] = append(f.sent[addr], text)
+	hook := f.onSend
+	f.mu.Unlock()
+	if hook != nil {
+		hook(addr)
+	}
+	f.mu.Lock()
 	return nil
 }
 
@@ -252,7 +289,7 @@ func TestServeRecordsIntegrationReports(t *testing.T) {
 	if resp := send(`{"id":"r2","method":"pane.report_agent","params":{"pane_id":"t7","state":"working"}}`); resp["result"] == nil {
 		t.Errorf("report_agent reply %v", resp)
 	}
-	if resp := send(`{"id":"r3","method":"pane.list","params":{}}`); resp["error"] == nil {
+	if resp := send(`{"id":"r3","method":"workspace.create","params":{}}`); resp["error"] == nil {
 		t.Errorf("unsupported method answered %v", resp)
 	}
 
@@ -273,3 +310,63 @@ func TestServeRecordsIntegrationReports(t *testing.T) {
 		t.Errorf("second Listen did not see the running daemon")
 	}
 }
+
+func (f *fakeCore) Read(addr string, lines int) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.screens[addr], nil
+}
+
+func (f *fakeCore) Keys(addr string, keys []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.keys[addr] = append(f.keys[addr], keys...)
+	return nil
+}
+
+func (f *fakeCore) Kill(addr string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.killed = append(f.killed, addr)
+	return nil
+}
+
+func (f *fakeCore) Layout() (Layout, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.panes == nil {
+		return Layout{}, fmt.Errorf("herdr-app: window not open")
+	}
+	return Layout{Panes: append([]AppPane(nil), f.panes...), Focused: f.focused}, nil
+}
+
+// AppDo records the command; pane.split and terminal.open add a shell t99
+// in the target's tab, pane.close removes the pane.
+func (f *fakeCore) AppDo(command string, args map[string]any) error {
+	b, _ := json.Marshal(args)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.did = append(f.did, command+" "+string(b))
+	switch command {
+	case "pane.split", "terminal.open":
+		if f.racePane {
+			// Someone opens a tab elsewhere at the same moment.
+			f.panes = append(f.panes, AppPane{Terminal: "t98", Pane: "p98", Tab: "tb2", Space: "sp1"})
+			f.terms["t98"] = &Terminal{Address: "t98", State: "live", Labels: map[string]string{}}
+		}
+		tab := f.panes[0]
+		f.panes = append(f.panes, AppPane{Terminal: "t99", Pane: "p99", Tab: tab.Tab, Space: tab.Space})
+		f.terms["t99"] = &Terminal{Address: "t99", Cwd: "/new", State: "live", Labels: map[string]string{}}
+	case "pane.close":
+		var kept []AppPane
+		for _, p := range f.panes {
+			if p.Pane != args["pane"] {
+				kept = append(kept, p)
+			}
+		}
+		f.panes = kept
+	}
+	return nil
+}
+
+func (f *fakeCore) HerdrAPI() (string, int, error) { return "0.9.5", 22, nil }
