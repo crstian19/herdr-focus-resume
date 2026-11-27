@@ -16,8 +16,9 @@ const appUsage = `usage: herdr-focus-resume app <command>
 
 Focus resume for the Herdr desktop app (herdr-app + herdr-core).
 
-  env [sh|fish]   print the shell lines that point Herdr's integrations at the
-                  daemon and start it; meant for eval in your shell rc
+  env [sh|fish]   print the shell lines that point Herdr's integrations and
+                  the herdr CLI at the daemon and start it; meant for eval in
+                  your shell rc
   ensure          start the daemon if it isn't running and build this boot's
                   list of dormant terminals
   serve           run the daemon in the foreground
@@ -96,6 +97,8 @@ func runApp(args []string) error {
 
 // printEnv writes shell code that only acts inside a herdr-core terminal of
 // the app (HC_TERMINAL_ID) and never inside the Herdr TUI (HERDR_ENV already set).
+// Integrations and the herdr CLI both follow HERDR_SOCKET_PATH, so the daemon
+// answers both (see app.App.Serve).
 func printEnv(shell, sock string) error {
 	self, err := os.Executable()
 	if err != nil {

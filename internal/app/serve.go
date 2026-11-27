@@ -34,8 +34,9 @@ type request struct {
 	Params json.RawMessage `json:"params"`
 }
 
-// Serve answers Herdr integration requests on the socket: it records
-// pane.report_agent_session and acknowledges the other report methods.
+// Serve answers Herdr API requests on the socket: it records the
+// integrations' pane.report_agent_session, acknowledges their other reports,
+// and translates the herdr CLI's pane and agent requests (see herdrAPI).
 func (a *App) Serve(l net.Listener) error {
 	for {
 		conn, err := l.Accept()
@@ -51,10 +52,14 @@ func (a *App) Serve(l net.Listener) error {
 
 func (a *App) handle(conn net.Conn) {
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
 	sc := bufio.NewScanner(conn)
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
-	for sc.Scan() {
+	for {
+		// Idle connections go away; a wait may then run as long as it asks.
+		conn.SetDeadline(time.Now().Add(10 * time.Second))
+		if !sc.Scan() {
+			return
+		}
 		var req request
 		if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
 			reply(conn, "", nil, "invalid_request", "invalid JSON")
@@ -72,11 +77,49 @@ func (a *App) handle(conn net.Conn) {
 			if err := a.Record(r); err != nil {
 				a.logf("record %s: %v", r.PaneID, err)
 			}
-		case "pane.report_agent", "pane.report_metadata":
+		case "pane.report_agent", "pane.report_metadata", "pane.release_agent":
 			reply(conn, req.ID, map[string]string{"type": "ok"}, "", "")
 		default:
-			reply(conn, req.ID, nil, "unsupported", "herdr-focus-resume only takes integration reports")
+			if isWait(req.Method) {
+				conn.SetDeadline(time.Time{})
+			}
+			result, err := a.herdrAPI(req.Method, req.Params, peerGone(conn))
+			conn.SetDeadline(time.Now().Add(10 * time.Second))
+			if err != nil {
+				replyErr(conn, req.ID, err)
+				continue
+			}
+			reply(conn, req.ID, result, "", "")
 		}
+	}
+}
+
+// peerGone reports whether the client closed its end of conn, without
+// reading any of its input.
+func peerGone(conn net.Conn) func() bool {
+	sc, ok := conn.(syscall.Conn)
+	if !ok {
+		return func() bool { return false }
+	}
+	raw, err := sc.SyscallConn()
+	if err != nil {
+		return func() bool { return false }
+	}
+	return func() bool {
+		gone := false
+		raw.Read(func(fd uintptr) bool {
+			var b [1]byte
+			n, _, err := syscall.Recvfrom(int(fd), b[:], syscall.MSG_PEEK|syscall.MSG_DONTWAIT)
+			switch {
+			case err == nil:
+				gone = n == 0 // EOF; the herdr CLI keeps its side open while it waits
+			case errors.Is(err, syscall.EAGAIN), errors.Is(err, syscall.EWOULDBLOCK), errors.Is(err, syscall.EINTR):
+			default:
+				gone = true // reset or otherwise broken
+			}
+			return true
+		})
+		return gone
 	}
 }
 

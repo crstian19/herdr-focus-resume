@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/crstian19/herdr-focus-resume/internal/wake"
@@ -28,14 +30,60 @@ type Commands interface {
 	Instance() (string, error)
 	// FocusedTerminal is the terminal behind the app's focused pane, or "".
 	FocusedTerminal() (string, error)
+
+	// The rest backs the Herdr API the daemon serves to the herdr CLI.
+
+	// Read returns a terminal's screen plus lines of history above it.
+	Read(address string, lines int) (string, error)
+	// Keys presses named keys (enter, esc, ctrl+c) in a terminal.
+	Keys(address string, keys []string) error
+	// Kill ends a terminal's program.
+	Kill(address string) error
+	// Layout is what the app window shows; it fails when the window is closed.
+	Layout() (Layout, error)
+	// AppDo runs a herdr-app command (pane.split, pane.close, terminal.open).
+	AppDo(command string, args map[string]any) error
+	// HerdrAPI is the version and socket protocol of the installed herdr CLI.
+	HerdrAPI() (version string, protocol int, err error)
 }
 
-// Terminal is the subset of `hc get --json` the app mode reads.
+// Layout is the part of `herdr-app ls` and `herdr-app status` the Herdr API
+// needs: which pane, tab and space show each terminal, and the focused one.
+type Layout struct {
+	Panes   []AppPane
+	Focused string // terminal address of the focused pane, or ""
+}
+
+// AppPane is one terminal shown in the app window.
+type AppPane struct {
+	Terminal string
+	Pane     string
+	Tab      string
+	Space    string
+}
+
+// Find returns the pane that shows terminal.
+func (l Layout) Find(terminal string) (AppPane, bool) {
+	for _, p := range l.Panes {
+		if p.Terminal == terminal {
+			return p, true
+		}
+	}
+	return AppPane{}, false
+}
+
+// Terminal is the subset of `hc ls --json` and `hc get --json` the app mode
+// reads.
 type Terminal struct {
 	Address    string            `json:"address"`
+	Name       string            `json:"name"`
+	Agent      string            `json:"agent"` // hc ls: the program, "claude-code" or "zsh"
 	Cwd        string            `json:"cwd"`
 	State      string            `json:"state"`
 	Pid        int               `json:"pid"`
+	Turn       uint64            `json:"turn"`
+	Title      string            `json:"title"`
+	Status     *Status           `json:"status"`
 	Labels     map[string]string `json:"labels"`
 	Foreground *struct {
 		Name string `json:"name"`
@@ -43,10 +91,28 @@ type Terminal struct {
 	} `json:"foreground"`
 }
 
+// Status is what an agent reported to herdr-core. `hc get` gives an object
+// ({"app":"omp","state":"working"}), `hc ls` only the state ("working").
+type Status struct {
+	App   string `json:"app"`
+	State string `json:"state"`
+}
+
+func (s *Status) UnmarshalJSON(b []byte) error {
+	var state string
+	if err := json.Unmarshal(b, &state); err == nil {
+		*s = Status{State: state}
+		return nil
+	}
+	type plain Status
+	return json.Unmarshal(b, (*plain)(s))
+}
+
 // CLI runs the hc and herdr-app binaries.
 type CLI struct {
 	HC      string // default "hc"
 	App     string // default "herdr-app"
+	Herdr   string // default "herdr"
 	Timeout time.Duration
 }
 
@@ -55,6 +121,10 @@ func (c CLI) run(bin string, args ...string) ([]byte, error) {
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
+	return c.runFor(timeout, bin, args...)
+}
+
+func (c CLI) runFor(timeout time.Duration, bin string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
@@ -99,7 +169,7 @@ func (c CLI) Terminals() ([]Terminal, error) {
 
 func (c CLI) Get(address string) (Terminal, error) {
 	var t Terminal
-	out, err := c.hc("get", address, "--json")
+	out, err := c.hc("get", "--json", "--", address)
 	if err != nil {
 		return t, err
 	}
@@ -118,9 +188,78 @@ func (c CLI) Label(address string, labels map[string]string) error {
 	return err
 }
 
+// Send can wait up to a minute for a person to finish typing a draft in the
+// terminal, so it gets more time than the other calls.
 func (c CLI) Send(address, text string) error {
-	_, err := c.hc("send", address, text)
+	_, err := c.runFor(90*time.Second, c.hcBin(), "send", "--", address, text)
 	return err
+}
+
+func (c CLI) hcBin() string {
+	if c.HC == "" {
+		return "hc"
+	}
+	return c.HC
+}
+
+func (c CLI) Read(address string, lines int) (string, error) {
+	out, err := c.hc("read", "--json", "--lines", strconv.Itoa(lines), "--", address)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return "", fmt.Errorf("decode hc read: %w", err)
+	}
+	return resp.Text, nil
+}
+
+func (c CLI) Keys(address string, keys []string) error {
+	_, err := c.hc(append([]string{"keys", "--", address}, keys...)...)
+	return err
+}
+
+func (c CLI) Kill(address string) error {
+	_, err := c.hc("kill", "--", address)
+	return err
+}
+
+func (c CLI) AppDo(command string, args map[string]any) error {
+	b, err := json.Marshal(args)
+	if err != nil {
+		return err
+	}
+	_, err = c.app("do", command, string(b))
+	return err
+}
+
+var protocolLine = regexp.MustCompile(`(?m)^protocol:\s*(\d+)`)
+
+func (c CLI) HerdrAPI() (string, int, error) {
+	bin := c.Herdr
+	if bin == "" {
+		bin = "herdr"
+	}
+	out, err := c.run(bin, "api", "schema")
+	if err != nil {
+		return "", 0, err
+	}
+	m := protocolLine.FindSubmatch(out)
+	if m == nil {
+		return "", 0, fmt.Errorf("herdr api schema: no protocol line")
+	}
+	protocol, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		return "", 0, err
+	}
+	out, err = c.run(bin, "--version")
+	if err != nil {
+		return "", 0, err
+	}
+	version := string(bytes.TrimSpace(bytes.TrimPrefix(bytes.TrimSpace(out), []byte("herdr"))))
+	return version, protocol, nil
 }
 
 func (c CLI) Instance() (string, error) {
@@ -154,15 +293,36 @@ func (c CLI) FocusedTerminal() (string, error) {
 		return "", fmt.Errorf("decode herdr-app status: %w", err)
 	}
 	if status.FocusedPane == "" {
-		return "", nil
+		return "", nil // skip `herdr-app ls`: Watch calls this every 0.7 s
 	}
-	out, err = c.app("ls")
+	l, err := c.Layout()
 	if err != nil {
 		return "", err
 	}
+	return l.Focused, nil
+}
+
+func (c CLI) Layout() (Layout, error) {
+	var l Layout
+	out, err := c.app("status")
+	if err != nil {
+		return l, err
+	}
+	var status struct {
+		FocusedPane string `json:"focused_pane"`
+	}
+	if err := json.Unmarshal(out, &status); err != nil {
+		return l, fmt.Errorf("decode herdr-app status: %w", err)
+	}
+	out, err = c.app("ls")
+	if err != nil {
+		return l, err
+	}
 	var ls struct {
 		Spaces []struct {
+			ID   string `json:"id"`
 			Tabs []struct {
+				ID        string `json:"id"`
 				Terminals []struct {
 					Terminal string `json:"terminal"`
 					Pane     string `json:"pane"`
@@ -171,18 +331,19 @@ func (c CLI) FocusedTerminal() (string, error) {
 		} `json:"spaces"`
 	}
 	if err := json.Unmarshal(out, &ls); err != nil {
-		return "", fmt.Errorf("decode herdr-app ls: %w", err)
+		return l, fmt.Errorf("decode herdr-app ls: %w", err)
 	}
 	for _, s := range ls.Spaces {
 		for _, t := range s.Tabs {
 			for _, term := range t.Terminals {
-				if term.Pane == status.FocusedPane {
-					return term.Terminal, nil
+				l.Panes = append(l.Panes, AppPane{Terminal: term.Terminal, Pane: term.Pane, Tab: t.ID, Space: s.ID})
+				if status.FocusedPane != "" && term.Pane == status.FocusedPane {
+					l.Focused = term.Terminal
 				}
 			}
 		}
 	}
-	return "", nil
+	return l, nil
 }
 
 // adapter lets the original wake.Runner drive herdr-core terminals: a pane ID

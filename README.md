@@ -128,6 +128,26 @@ The app has no plugin hooks and no `session.json`, so the plugin brings its own 
 
 `herdr-focus-resume app focus <t>` resumes a terminal by hand.
 
+### The herdr CLI inside the app
+
+`HERDR_SOCKET_PATH` points the `herdr` CLI at the daemon too, so the daemon also answers the CLI's
+pane and agent commands. It translates them to herdr-core (`hc`) and the app window (`herdr-app`).
+A pane ID is a terminal address (`t7`), the same as `HERDR_PANE_ID`.
+
+| `herdr` command | Runs |
+| --- | --- |
+| `pane list`, `pane current`, `pane get`, `agent list`, `agent get` | `hc ls` / `hc get`, plus `herdr-app ls` for spaces, tabs and focus |
+| `pane read`, `agent read` | `hc read --lines N` |
+| `pane run <p> <text>`, `agent prompt` | `hc send` (pastes, then presses Enter) |
+| `pane send-keys`, `agent send-keys` | `hc keys` (`C-c` becomes `ctrl+c`) |
+| `agent wait`, `agent prompt --wait`, `pane wait-output` | polls `hc get` / `hc read` |
+| `pane split` | `herdr-app do pane.split`. With `--cwd`, only next to the focused pane (`terminal.open`) |
+| `pane close` | `herdr-app do pane.close`, or `hc kill` for a terminal without a pane |
+
+Other commands fail with `unsupported` and name the `hc` or `herdr-app` command to use instead.
+For example, `pane send-text` cannot work, because herdr-core has no way to paste without
+pressing Enter. Workspaces and tabs belong to the app window (`herdr-app do space.new`, `tab.new`).
+
 ## Safety
 
 - If `resume_agents_on_restore` is not `false`, the plugin does nothing, so an agent is never
